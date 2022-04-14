@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 
 import sys
-sys.path.append(r'C:\Users\gunsr\Desktop\Programming\Git Remote\Investic\Python-for-Investing-101\Global_Config')
+sys.path.append(r'C:\Users\gunsr\Desktop\Programming\Git_Remote\Investic\Python-for-Investing-101\Global_Config')
 import api_key
 bn_key = api_key.binance_api_key
 bn_secret = api_key.binance_api_secret
@@ -59,8 +59,6 @@ def get_ccxt_data(ls_tickers, api_key, api_secret, tf='1d', limit=100):
         ls_df.append(df)
 
     return ls_df
-
-
 
 
 if __name__ == '__main__':
