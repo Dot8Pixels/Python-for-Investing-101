@@ -18,6 +18,9 @@ import api_key
 bn_key = api_key.binance_api_key
 bn_secret = api_key.binance_api_secret
 
+column_names = ["strategy", "condition", "parameters", "total_return", "max_drawdown", "winrate"]
+global_log_df = pd.DataFrame(columns=column_names)
+
 def get_data(ls_tickers, api_key, api_secret):
     
     client = Client(api_key, api_secret)
@@ -75,109 +78,6 @@ def backtest_vectorbt(df):
 
     return df
 
-
-def create_strategy(df, indicator, fast_macd, slow_macd):
-    if indicator == 'macd':
-        df.ta.macd(fast_macd, slow_macd, append=True)
-        print(df)
-        # df['signal'] = df.iloc[:,-3] > 0
-        df['signal'] = df.iloc[:,-3] > df.iloc[:, -2]
-
-    elif indicator == 'rsi':
-        print('rsi')
-
-    return df
-
-def multi_strategy(df):
-    # fast_macd = [*range(5, 27, 1)]
-    fast_macd = [5, 7, 12, 26]
-    # print(fast_macd)
-    # slow_macd = [*range(5, 27, 1)]
-    slow_macd = [5, 7, 12, 26]
-    # print(slow_macd)
-
-    for i in fast_macd:
-        for j in slow_macd:
-            if i != j:
-                new_df = df.copy()
-                print(f"fast: {i}, slow: {j}")
-                new_df = new_df.set_index('date')
-                new_df.ta.macd(i, j, append=True)
-                new_df['signal'] = new_df.iloc[:,-3] > new_df.iloc[:, -1]
-
-                new_df.ta.tsignals(new_df.signal, asbool=True, append=True)
-                new_df['action_price'] = new_df['open'].shift(-1)
-
-                trades_table = new_df.iloc[: -5][new_df.TS_Trades != 0]
-                trades_table['return'] = trades_table['action_price'].pct_change()
-                trades_summary = trades_table.loc[trades_table.TS_Exits == True]
-
-                port = vbt.Portfolio.from_signals(new_df.close,
-                                                entries=new_df.TS_Entries,
-                                                exits=new_df.TS_Exits,
-                                                freq="D",
-                                                init_cash=100000,
-                                                fees=0.0025,
-                                                slippage=0.0025)
-
-                port_stats = port.stats()
-
-                print(f"Total Return [%]: {port_stats[5]}")
-                print(f"Max Drawdown [%]: {port_stats[9]}")
-                print(f"Win Rate [%]: {port_stats[15]}")
-
-                print("------------------------------------------------")
-
-                with open('Self_Exercise/backtest_output.txt', 'a+') as f:
-                    f.write(f"Indicator: MACD\n")
-                    f.write(f"Condition: MACD > Signal\n")
-                    f.write(f"fast: {i}, slow: {j}\n")
-                    f.write(f"Total Return [%]: {port_stats[5]}\n")
-                    f.write(f"Max Drawdown [%]: {port_stats[9]}\n")
-                    f.write(f"Win Rate [%]: {port_stats[15]}\n")
-                    f.write("------------------------------------------------\n")
-
-    for i in fast_macd:
-        for j in slow_macd:
-            if i != j:
-                new_df = df.copy()
-                print(f"fast: {i}, slow: {j}")
-                new_df = new_df.set_index('date')
-                new_df.ta.macd(i, j, append=True)
-                new_df['signal'] = new_df.iloc[:,-3] > 0
-
-                new_df.ta.tsignals(new_df.signal, asbool=True, append=True)
-                new_df['action_price'] = new_df['open'].shift(-1)
-
-                trades_table = new_df.iloc[: -5][new_df.TS_Trades != 0]
-                trades_table['return'] = trades_table['action_price'].pct_change()
-                trades_summary = trades_table.loc[trades_table.TS_Exits == True]
-
-                port = vbt.Portfolio.from_signals(new_df.close,
-                                                entries=new_df.TS_Entries,
-                                                exits=new_df.TS_Exits,
-                                                freq="D",
-                                                init_cash=100000,
-                                                fees=0.0025,
-                                                slippage=0.0025)
-
-                port_stats = port.stats()
-
-                print(f"Total Return [%]: {port_stats[5]}")
-                print(f"Max Drawdown [%]: {port_stats[9]}")
-                print(f"Win Rate [%]: {port_stats[15]}")
-
-                print("------------------------------------------------")
-
-                with open('Self_Exercise/backtest_output.txt', 'a+') as f:
-                    f.write(f"Indicator: Action Zone\n")
-                    f.write(f"Condition: MACD > 0\n")
-                    f.write(f"fast: {i}, slow: {j}\n")
-                    f.write(f"Total Return [%]: {port_stats[5]}\n")
-                    f.write(f"Max Drawdown [%]: {port_stats[9]}\n")
-                    f.write(f"Win Rate [%]: {port_stats[15]}\n")
-                    f.write("------------------------------------------------\n")
-
 def multi_macd_str(df, fast_macd, slow_macd):
     for i in fast_macd:
         for j in slow_macd:
@@ -213,18 +113,21 @@ def multi_action_zone_str(df, fast_macd, slow_macd):
                 "------------------------------------------------\n"
 
 def get_return(df, strategy_name, condition, parameters_detail):
+
+    global global_log_df
+
     port = vbt.Portfolio.from_signals(df.close,
-                                                entries=df.TS_Entries,
-                                                exits=df.TS_Exits,
-                                                freq="D",
-                                                init_cash=100000,
-                                                fees=0.0025,
-                                                slippage=0.0025)
+                                    entries=df.TS_Entries,
+                                    exits=df.TS_Exits,
+                                    freq="D",
+                                    init_cash=100000,
+                                    fees=0.0025,
+                                    slippage=0.0025)
 
     port_stats = port.stats()
 
-    with open('Self_Exercise/backtest_output.txt', 'a+') as f:
-        f.write(f"Indicator: {strategy_name}\n")
+    with open('logs/backtest_log.txt', 'a+') as f:
+        f.write(f"Strategy: {strategy_name}\n")
         f.write(f"Condition: {condition}\n")
         f.write(parameters_detail+"\n")
         f.write(f"Total Return [%]: {port_stats[5]}\n")
@@ -232,6 +135,14 @@ def get_return(df, strategy_name, condition, parameters_detail):
         f.write(f"Win Rate [%]: {port_stats[15]}\n")
         f.write("------------------------------------------------\n")
 
+        input_df = pd.DataFrame({"strategy": [strategy_name],
+                                "condition": [condition],
+                                "parameters": [parameters_detail],
+                                "total_return": [port_stats[5]], 
+                                 "max_drawdown": [port_stats[9]], 
+                                 "winrate": [port_stats[15]]})
+
+        global_log_df = global_log_df.append(input_df, ignore_index=True)
 
 if __name__ == "__main__":
 
@@ -248,12 +159,24 @@ if __name__ == "__main__":
         print(ls_tickers[idx])
         print(data)
         
-        fast_macd = [5,7,10,12,15,20,23,26]
-        slow_macd = [5,7,10,12,15,20,23,26]
+        fast_macd = [*range(5, 27, 1)]
+        slow_macd = [*range(5, 27, 1)]
+
+        # fast_macd = [5,7,10,12,15,20,23,26]
+        # slow_macd = [5,7,10,12,15,20,23,26]
 
         multi_macd_str(data, fast_macd, slow_macd)
 
         multi_action_zone_str(data, fast_macd, slow_macd)
+
+        global_log_df = global_log_df.sort_values(by=['total_return', 
+                                                        'max_drawdown', 
+                                                        'winrate'], 
+                                                    ascending=[False, 
+                                                                True,
+                                                                False])
+        global_log_df.to_csv("./logs/backtest_df_log.csv", header=True, mode="w+")
+        print(global_log_df)
     
 
     print(" --- Done ---")

@@ -54,7 +54,7 @@ if __name__ == '__main__':
 
     dfs_ticker[0].ta.supertrend(length = 14, multiplier = 3, append = True)
     df = dfs_ticker[0]
-    # df.to_csv('./Self_Exercise/output.csv', header=True) 
+    # df.to_csv('./logs/output.csv', header=True, mode="w+") 
     print(df)
 
     df = df.iloc[14:]
