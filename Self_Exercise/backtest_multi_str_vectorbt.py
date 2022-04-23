@@ -18,7 +18,7 @@ import api_key
 bn_key = api_key.binance_api_key
 bn_secret = api_key.binance_api_secret
 
-column_names = ["strategy", "condition", "parameters", "total_return", "max_drawdown", "winrate"]
+column_names = ["ticker", "strategy", "condition", "parameters", "total_return", "max_drawdown", "winrate"]
 global_log_df = pd.DataFrame(columns=column_names)
 
 def get_data(ls_tickers, api_key, api_secret):
@@ -69,7 +69,6 @@ def backtest_vectorbt(df):
     df.ta.tsignals(df.signal, asbool=True, append=True)
     
     df['action_price'] = df['open'].shift(-1)
-    # print(df)
 
     trades_table = df.iloc[: -5][df.TS_Trades != 0]
     trades_table['return'] = trades_table['action_price'].pct_change()
@@ -78,41 +77,67 @@ def backtest_vectorbt(df):
 
     return df
 
-def multi_macd_str(df, fast_macd, slow_macd):
+def multi_macd_str(ticker , data_df, fast_macd, slow_macd):
     for i in fast_macd:
         for j in slow_macd:
             if i != j:
-                new_df = df.copy()
+                df = data_df.copy()
 
-                new_df.ta.macd(i, j, append=True)
-                new_df['signal'] = new_df.iloc[:,-3] > new_df.iloc[:, -2]
+                df.ta.macd(i, j, append=True)
+                df['signal'] = df.iloc[:,-3] > df.iloc[:, -2]
 
-                tsignal_df = backtest_vectorbt(new_df)
+                tsignal_df = backtest_vectorbt(df)
 
-                get_return(tsignal_df, "MACD", "MACD > Signal", f"Fast: {i}, Slow: {j}")
+                get_return(ticker, tsignal_df, "MACD", "MACD > Signal", f"Fast: {i}, Slow: {j}")
 
-                print("MACD")
-                print(f"fast: {i}, slow: {j}")
-                "------------------------------------------------\n"
-
-def multi_action_zone_str(df, fast_macd, slow_macd):
+def multi_action_zone_str(ticker , data_df, fast_macd, slow_macd):
     for i in fast_macd:
         for j in slow_macd:
             if i != j:
-                new_df = df.copy()
+                df = data_df.copy()
 
-                new_df.ta.macd(i, j, append=True)
-                new_df['signal'] = new_df.iloc[:,-3] > 0
+                df.ta.macd(i, j, append=True)
+                df['signal'] = df.iloc[:,-3] > 0
 
-                tsignal_df = backtest_vectorbt(new_df)
+                tsignal_df = backtest_vectorbt(df)
 
-                get_return(tsignal_df, "Action Zone", "MACD > 0", f"Fast: {i}, Slow: {j}")
+                get_return(ticker, tsignal_df, "Action Zone", "MACD > 0", f"Fast: {i}, Slow: {j}")
 
-                print("Action Zone")
-                print(f"fast: {i}, slow: {j}")
-                "------------------------------------------------\n"
+def golden_death_cross(ticker, data_df):
+    df = data_df.copy()
 
-def get_return(df, strategy_name, condition, parameters_detail):
+    # df.ta.ema(length = 50, append=True)
+    # df.ta.ema(length = 200, append=True)
+    # df['signal'] = df.iloc[:,-2] > df.iloc[:,-1]
+
+    if len(df) > 200:
+
+        df['signal'] = df.ta.ema(50, append=True) > df.ta.ema(200, append=True)
+
+        tsignal_df = backtest_vectorbt(df)
+
+        get_return(ticker, tsignal_df, "EMA Cross", "EMA50 > EMA200", f"Fast: 50, Slow: 200")
+
+    else:
+        print("Dataframe length not enough")
+
+def multi_bollinger_bands_str(ticker, data_df, bbands_length, bbands_std, mode='sma'):
+    df = data_df.copy()
+
+    for i in bbands_length:
+        for j in bbands_std:
+            df.ta.bbands(length=i, std=j, mode=mode,append=True)
+            
+            df.loc[df.close < df.iloc[:,-4], 'signal'] = True
+            df.loc[(df.close > df.iloc[:,-4]) & (df.close > df.iloc[:,-3]), 'signal'] = False
+            df['signal'] = df['signal'].replace(np.nan, False) 
+
+            tsignal_df = backtest_vectorbt(df)
+
+            get_return(ticker, tsignal_df, "Bollinger Bands", "Close < Middle", f"Length: {i}, STD: {j}")
+    
+
+def get_return(ticker, df, strategy_name, condition, parameters_detail):
 
     global global_log_df
 
@@ -122,11 +147,13 @@ def get_return(df, strategy_name, condition, parameters_detail):
                                     freq="D",
                                     init_cash=100000,
                                     fees=0.0025,
+                                    sl_trail = 0.20,
                                     slippage=0.0025)
 
     port_stats = port.stats()
 
     with open('logs/backtest_log.txt', 'a+') as f:
+        f.write(f"Ticker: {ticker}\n")
         f.write(f"Strategy: {strategy_name}\n")
         f.write(f"Condition: {condition}\n")
         f.write(parameters_detail+"\n")
@@ -135,7 +162,8 @@ def get_return(df, strategy_name, condition, parameters_detail):
         f.write(f"Win Rate [%]: {port_stats[15]}\n")
         f.write("------------------------------------------------\n")
 
-        input_df = pd.DataFrame({"strategy": [strategy_name],
+        input_df = pd.DataFrame({"ticker": [ticker],
+                                "strategy": [strategy_name],
                                 "condition": [condition],
                                 "parameters": [parameters_detail],
                                 "total_return": [port_stats[5]], 
@@ -144,42 +172,63 @@ def get_return(df, strategy_name, condition, parameters_detail):
 
         global_log_df = global_log_df.append(input_df, ignore_index=True)
 
+def export_log_df_to_csv(log_df):
+    log_df = log_df.sort_values(by=['ticker',
+                                    'total_return', 
+                                    'max_drawdown', 
+                                    'winrate'], 
+                                ascending=[True,
+                                            False, 
+                                            True,
+                                            False])   
+
+    log_df = log_df.reset_index(drop=True)
+    log_df.index = log_df.index + 1
+    log_df.to_csv("./logs/backtest_df_log.csv", header=True, mode="w+")
+    
+    return log_df
+
+
 if __name__ == "__main__":
 
-    ls_tickers = ['BTCUSDT']
-
-    ls_df = []
+    ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD']
+    # ls_tickers = ['BTCUSDT']
+    # ls_tickers = ['UNIBUSD', 'LUNABUSD', 'NEARBUSD']
 
     ls_df = get_data(ls_tickers, bn_key, bn_key)
 
     fast_macd = 12
     slow_macd = 26
 
-    for idx, data in enumerate(ls_df):
-        print(ls_tickers[idx])
-        print(data)
+    for idx, data_df in enumerate(ls_df):
+        ticker = ls_tickers[idx]
+        print(ticker)
+        # print(data_df)
         
-        fast_macd = [*range(5, 27, 1)]
-        slow_macd = [*range(5, 27, 1)]
+        # fast_macd = [*range(5, 27, 1)]
+        # slow_macd = [*range(5, 27, 1)]
 
-        # fast_macd = [5,7,10,12,15,20,23,26]
-        # slow_macd = [5,7,10,12,15,20,23,26]
+        fast_macd = [5,12,21,26]
+        slow_macd = [5,12,21,26]
 
-        multi_macd_str(data, fast_macd, slow_macd)
+        multi_macd_str(ticker, data_df, fast_macd, slow_macd)
 
-        multi_action_zone_str(data, fast_macd, slow_macd)
+        multi_action_zone_str(ticker, data_df, fast_macd, slow_macd)
+        
+        golden_death_cross(ticker, data_df)
 
-        global_log_df = global_log_df.sort_values(by=['total_return', 
-                                                        'max_drawdown', 
-                                                        'winrate'], 
-                                                    ascending=[False, 
-                                                                True,
-                                                                False])
-        global_log_df.to_csv("./logs/backtest_df_log.csv", header=True, mode="w+")
-        print(global_log_df)
+        bbands_length = [5, 7, 20]
+        bbands_std = [2,3,5]
+
+        multi_bollinger_bands_str(ticker, data_df, bbands_length, bbands_std)
+
     
+    
+    global_log_df = export_log_df_to_csv(global_log_df)
+        
+    print(global_log_df)
 
-    print(" --- Done ---")
+    print(" --- Process Done ---")
 
 
 
