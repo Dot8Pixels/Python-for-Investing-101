@@ -62,7 +62,7 @@ def get_data(ls_tickers, api_key, api_secret):
         
     return ls_df
 
-def backtest_vectorbt(df):
+def backtest_vectorbt(df, str_detail):
 
     df = df.set_index('date')
 
@@ -75,6 +75,10 @@ def backtest_vectorbt(df):
     
     trades_summary = trades_table.loc[trades_table.TS_Exits == True]
 
+    print(str_detail)
+    print(df)
+    print(trades_summary)
+
     return df
 
 def multi_macd_str(ticker , data_df, fast_macd, slow_macd):
@@ -84,9 +88,9 @@ def multi_macd_str(ticker , data_df, fast_macd, slow_macd):
                 df = data_df.copy()
 
                 df.ta.macd(i, j, append=True)
-                df['signal'] = df.iloc[:,-3] > df.iloc[:, -2]
+                df['signal'] = df.iloc[:,-3] > df.iloc[:, -1]
 
-                tsignal_df = backtest_vectorbt(df)
+                tsignal_df = backtest_vectorbt(df, f"MACD : Fast: {i}, Slow: {j}")
 
                 get_return(ticker, tsignal_df, "MACD", "MACD > Signal", f"Fast: {i}, Slow: {j}")
 
@@ -99,7 +103,7 @@ def multi_action_zone_str(ticker , data_df, fast_macd, slow_macd):
                 df.ta.macd(i, j, append=True)
                 df['signal'] = df.iloc[:,-3] > 0
 
-                tsignal_df = backtest_vectorbt(df)
+                tsignal_df = backtest_vectorbt(df, f"ActionZone : Fast: {i}, Slow: {j}")
 
                 get_return(ticker, tsignal_df, "Action Zone", "MACD > 0", f"Fast: {i}, Slow: {j}")
 
@@ -114,9 +118,9 @@ def golden_death_cross(ticker, data_df):
 
         df['signal'] = df.ta.ema(50, append=True) > df.ta.ema(200, append=True)
 
-        tsignal_df = backtest_vectorbt(df)
+        tsignal_df = backtest_vectorbt(df, f"Golden Death Cross: Fast: 50, Slow: 200")
 
-        get_return(ticker, tsignal_df, "EMA Cross", "EMA50 > EMA200", f"Fast: 50, Slow: 200")
+        get_return(ticker, tsignal_df, "Golden Death Cross", "EMA50 > EMA200", f"Fast: 50, Slow: 200")
 
     else:
         print("Dataframe length not enough")
@@ -132,7 +136,7 @@ def multi_bollinger_bands_str(ticker, data_df, bbands_length, bbands_std, mode='
             df.loc[(df.close > df.iloc[:,-4]) & (df.close > df.iloc[:,-3]), 'signal'] = False
             df['signal'] = df['signal'].replace(np.nan, False) 
 
-            tsignal_df = backtest_vectorbt(df)
+            tsignal_df = backtest_vectorbt(df, f"Bollinger Bands: Length: {i}, STD: {j}")
 
             get_return(ticker, tsignal_df, "Bollinger Bands", "Close < Middle", f"Length: {i}, STD: {j}")
     
@@ -191,8 +195,8 @@ def export_log_df_to_csv(log_df):
 
 if __name__ == "__main__":
 
-    ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD']
-    # ls_tickers = ['BTCUSDT']
+    # ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD']
+    ls_tickers = ['BTCUSDT']
     # ls_tickers = ['UNIBUSD', 'LUNABUSD', 'NEARBUSD']
 
     ls_df = get_data(ls_tickers, bn_key, bn_key)
@@ -208,19 +212,22 @@ if __name__ == "__main__":
         # fast_macd = [*range(5, 27, 1)]
         # slow_macd = [*range(5, 27, 1)]
 
-        fast_macd = [5,12,21,26]
-        slow_macd = [5,12,21,26]
+        # fast_macd = [5,12,21,26]
+        # slow_macd = [5,12,21,26]
+
+        fast_macd = [12]
+        slow_macd = [26]
 
         multi_macd_str(ticker, data_df, fast_macd, slow_macd)
 
-        multi_action_zone_str(ticker, data_df, fast_macd, slow_macd)
+        # multi_action_zone_str(ticker, data_df, fast_macd, slow_macd)
         
-        golden_death_cross(ticker, data_df)
+        # golden_death_cross(ticker, data_df)
 
         bbands_length = [5, 7, 20]
         bbands_std = [2,3,5]
 
-        multi_bollinger_bands_str(ticker, data_df, bbands_length, bbands_std)
+        # multi_bollinger_bands_str(ticker, data_df, bbands_length, bbands_std)
 
     
     

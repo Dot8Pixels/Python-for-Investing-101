@@ -12,7 +12,7 @@ import api_key
 bn_key = api_key.binance_api_key
 bn_secret = api_key.binance_api_secret
 
-def get_ccxt_data(ls_tickers, api_key, api_secret, tf='1d', limit=365):
+def get_ccxt_data(ls_tickers, api_key, api_secret, tf='1d', limit=2000):
 
     exchange = ccxt.binance({
     'apiKey' : api_key,
@@ -33,7 +33,8 @@ def get_ccxt_data(ls_tickers, api_key, api_secret, tf='1d', limit=365):
 
 if __name__ == '__main__':
     
-    ls_tickers = ['BTCUSDT', 'ETHUSDT']
+    # ls_tickers = ['BTCUSDT', 'ETHUSDT']
+    ls_tickers = ['NEARBUSD']
 
     dfs_ticker = []
 
@@ -51,14 +52,35 @@ if __name__ == '__main__':
     # print(dfs_ticker[0])
 
     # print(help(ta.supertrend))
+    # print(help(ta.stoch))
+    # print(help(ta.bbands))
 
-    dfs_ticker[0].ta.supertrend(length = 14, multiplier = 3, append = True)
-    df = dfs_ticker[0]
-    # df.to_csv('./logs/output.csv', header=True, mode="w+") 
-    print(df)
+    # # dfs_ticker[0].ta.supertrend(length = 14, multiplier = 3, append = True)
 
-    df = df.iloc[14:]
-    print(df)
-    df['signal'] = df.iloc[:,-3] == 1
-    print(df)
+    # dfs_ticker[0].ta.ema(length = 50, append=True)
+    # dfs_ticker[0].ta.ema(length = 200, append=True)
+
+    # df = dfs_ticker[0]
+    # # df.to_csv('./logs/output.csv', header=True, mode="w+") 
+    # print(df)
+
+    # df = df.iloc[14:]
+    # print(df)
+    # df['signal'] = df.iloc[:,-3] == 1
+    # print(df)
     
+    df = dfs_ticker[0]
+    df.ta.bbands(length=3, std=3, append = True)
+    # df['signal'] =  (df.close < df.iloc[:,-4]) & (df.close <  df.iloc[:,-3])
+    # df['signal'] =  (df.close < df.iloc[:,-4])
+    print(df)
+    df.loc[df.close < df.iloc[:,-4], 'signal'] = 'True' 
+    df.loc[(df.close > df.iloc[:,-4]) & (df.close > df.iloc[:,-3]), 'signal'] = 'False'
+    df['signal'] = df['signal'].replace(np.nan, 'False') 
+    df = df.iloc[:,-8:]
+    print(df)
+    # print(help(ta.bbands))
+
+
+    
+
