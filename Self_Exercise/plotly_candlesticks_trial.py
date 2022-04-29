@@ -55,6 +55,8 @@ if __name__ == '__main__':
 
     df.ta.macd(12, 26, append=True)
 
+
+    str_signal = "ActionZone"
     df['signal'] = df.iloc[:,-3] > 0
 
     # print(df)
@@ -83,12 +85,30 @@ if __name__ == '__main__':
 
     
     # fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig = make_subplots(rows=3, cols=2, 
+##    fig = make_subplots(rows=3, cols=2, 
+##                        # shared_xaxes=True,
+##                        specs=[[{"rowspan":2, "colspan": 2}, None],
+##                                [None, None],
+##                                [{"colspan": 2}, None]],
+##                        print_grid=False)
+
+    # fig = make_subplots(rows=3, cols=2, 
+    #                     # shared_xaxes=True,
+    #                     specs=[[{"colspan":2}, {}],
+    #                             [{"colspan":2}, {}],
+    #                             [{"colspan":2}, {}]],
+    #                     print_grid=False)
+
+    fig = make_subplots(rows=6, cols=2, 
                         # shared_xaxes=True,
-                        specs=[[{"rowspan":2, "colspan": 2}, None],
-                                [None, None],
-                                [{"colspan": 2}, None]],
+                        specs=[[{"rowspan":4,"colspan":2}, {}],
+                                [None,None],
+                                [None,None],
+                                [None,None],
+                                [{"colspan":2}, {}],
+                                [{"colspan":2}, {}]],
                         print_grid=False)
+    
 
     fig.add_trace(go.Candlestick(x=df['date'],
                                 open=df['open'], 
@@ -106,15 +126,40 @@ if __name__ == '__main__':
                             marker=dict(size=8,
                             line=dict(color='DarkSlateGrey',width=2)),
                             marker_color= color_markers,
-                            name='signal'), 
+                            name=str_signal), 
                             row=1, col=1)
     
     fig.add_trace(go.Bar(x=df['date'], 
                         y=df['volume'], 
                         marker=dict(color=bar_colors),
                         name="volume"),
-                        row=3, col=1,)
-    
+                        row=5, col=1)
+
+
+    df_rsi = dfs_ticker[0]
+    df_rsi.ta.rsi(append=True)
+
+    fig.add_trace(go.Scatter(x=df_rsi['date'], 
+                            y=df_rsi.iloc[:,-1],
+                            mode='lines',
+                            name="RSI"),
+                            row=6, col=1)
+
+    fig.add_trace(go.Scatter(
+            name='RSI=30',
+            x = [df['date'].min(), df['date'].max()],
+            y = [30, 30],
+            mode = "lines",
+            marker = dict(color = 'rgb(243, 156, 18)')
+        ),row=6, col=1)
+
+    fig.add_trace(go.Scatter(
+            name='RSI=70',
+            x = [df['date'].min(), df['date'].max()],
+            y = [70, 70],
+            mode = "lines",
+            marker = dict(color = 'rgb(243, 156, 18)')
+        ),row=6, col=1)
 
     fig.update_layout(xaxis_rangeslider_visible=False, 
                         title_text="<b>" + ls_tickers[0] + "</b>",
@@ -123,6 +168,7 @@ if __name__ == '__main__':
                                         size=48),
                         title_xanchor="auto",
                         title_yanchor="auto")
+
 
     fig.update_xaxes(matches='x')
     fig.show()
