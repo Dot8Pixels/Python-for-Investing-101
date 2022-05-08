@@ -5,6 +5,7 @@ import numpy as np
 import vectorbt as vbt
 from datetime import datetime
 from binance.client import Client
+import ccxt
 import pathlib
 
 import sys
@@ -19,45 +20,62 @@ global_log_df = pd.DataFrame(columns=column_names)
 
 current_file_path = pathlib.Path(__file__).parent.resolve()
 
-def get_data(ls_tickers, api_key="", api_secret=""):
+def get_historical_data(ls_tickers, exchange="binance", days = 365, api_key="", api_secret=""):
     
-    client = Client(api_key, api_secret)
-    
-    ls_df = []
-    
-    for ticker in ls_tickers:
-        klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_1DAY, "120 day ago UTC")
-        data = pd.DataFrame(klines)
-        data.columns = ['open_time', 
-                        'Open', 
-                        'High', 
-                        'Low',
-                        'Close', 
-                        'Volume',
-                        'close_time',
-                        'quote_asset_volume',
-                        'number_of_trades',
-                        'taker_buy_base_asset_volume',
-                        'take_buy_quote_asset_volume',
-                        'can_be_ignored']
+    if exchange.lower() == 'binance':
+        client = Client(api_key, api_secret)
         
-        data['Date'] = pd.to_datetime(data['open_time'], unit='ms')
-        df = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
-        df = df.astype({"Open": float, 
-                        "High": float, 
-                        "Low": float, 
-                        "Close": float, 
-                        "Volume": float})
-        df = df.rename(columns = {  'Date': 'date',
-                                    'Open': 'open', 
-                                    'High': 'high', 
-                                    'Low': 'low', 
-                                    'Close': 'close',
-                                    'Volume': 'volume'}, 
-                                    inplace = False)
-        df['chg'] = df['close'].pct_change() * 100
-        ls_df.append(df)
+        ls_df = []
         
+        for ticker in ls_tickers:
+            klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_1DAY, str(days) + " day ago UTC")
+            data = pd.DataFrame(klines)
+            data.columns = ['open_time', 
+                            'Open', 
+                            'High', 
+                            'Low',
+                            'Close', 
+                            'Volume',
+                            'close_time',
+                            'quote_asset_volume',
+                            'number_of_trades',
+                            'taker_buy_base_asset_volume',
+                            'take_buy_quote_asset_volume',
+                            'can_be_ignored']
+            
+            data['Date'] = pd.to_datetime(data['open_time'], unit='ms')
+            df = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+            df = df.astype({"Open": float, 
+                            "High": float, 
+                            "Low": float, 
+                            "Close": float, 
+                            "Volume": float})
+            df = df.rename(columns = {  'Date': 'date',
+                                        'Open': 'open', 
+                                        'High': 'high', 
+                                        'Low': 'low', 
+                                        'Close': 'close',
+                                        'Volume': 'volume'}, 
+                                        inplace = False)
+            df['chg'] = df['close'].pct_change() * 100
+            ls_df.append(df)
+
+    elif exchange.lower() == 'ccxt':
+        exchange = ccxt.binance({
+                                'apiKey' : api_key,
+                                'secret' : api_secret
+                                })
+
+        ls_df = []
+
+        for ticker in ls_tickers:
+            data = exchange.fetch_ohlcv(ticker, timeframe="1d", limit=days)
+            df = pd.DataFrame(data, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
+            df['date'] = pd.to_datetime(df['date'], unit='ms')
+
+            ls_df.append(df)
+
+
     return ls_df
 
 
@@ -250,11 +268,14 @@ def export_log_df_to_csv(log_df):
 
 if __name__ == "__main__":
 
-    ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD', 'GALABUSD']
     # ls_tickers = ['BTCUSDT']
-    # ls_tickers = ['UNIBUSD', 'LUNABUSD', 'NEARBUSD']
-
-    ls_df = get_data(ls_tickers, bn_key, bn_key)
+    ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD', 'GALABUSD']
+    
+    exchange = "binance"
+    ls_df = get_historical_data(ls_tickers=ls_tickers, 
+                                exchange=exchange, 
+                                days=120, 
+                                api_key=bn_key, api_secret=bn_secret)
 
     fast_macd = 12
     slow_macd = 26
@@ -269,10 +290,6 @@ if __name__ == "__main__":
 
         fast_macd = [5,12,21,26]
         slow_macd = [5,12,21,26]
-
-        # fast_macd = [12]
-        # slow_macd = [26]
-
         multi_macd_str(ticker, data_df, fast_macd, slow_macd)
 
         multi_action_zone_str(ticker, data_df, fast_macd, slow_macd)
