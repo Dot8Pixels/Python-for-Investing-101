@@ -7,74 +7,96 @@ from datetime import datetime
 from binance.client import Client
 import ccxt
 import pathlib
-
 import sys
-sys.path.append(r'C:\Users\gunsr\Desktop\Programming\Git_Remote\Investic\Python-for-Investing-101\Global_Config')
-import api_key
-
-bn_key = api_key.binance_api_key
-bn_secret = api_key.binance_api_secret
-
-column_names = ["ticker", "strategy", "condition", "parameters", "total_return", "max_drawdown", "winrate"]
-global_log_df = pd.DataFrame(columns=column_names)
 
 current_file_path = pathlib.Path(__file__).parent.resolve()
 
-def get_historical_data(ls_tickers, exchange="binance", days = 365, api_key="", api_secret=""):
+def select_api_get_data(api, timeframe, limit):
+
+    # Binance: limits_data = number of days ago
+    if api == "binance":
+        ls_df = get_historical_data_binance(ls_tickers=ls_tickers, 
+                                            timeframe=tf,
+                                            limits=limit,
+                                            api_key="", api_secret="")
     
-    if exchange.lower() == 'binance':
-        client = Client(api_key, api_secret)
+    # CCXT: limits_data = number of bars
+    elif api == "ccxt":
+        ls_df = get_historical_data_ccxt(ls_tickers=ls_tickers, 
+                                        timeframe=tf,
+                                        limits=limit,
+                                        api_key="", api_secret="")
+
+    return ls_df
+
+
+
+def get_historical_data_binance(ls_tickers, timeframe="1d",limits = 365, api_key="", api_secret=""):
         
-        ls_df = []
+    # client = Client(api_key, api_secret)
+    client = Client()
+    
+    ls_df = []
+    
+    for ticker in ls_tickers:
+        if timeframe == "1d":
+            klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_1HOUR, str(limits) + " day ago UTC")
+        elif timeframe == "4h":
+            klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_4HOUR, str(limits) + " day ago UTC")
+        elif timeframe == "1h":
+            klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_1HOUR, str(limits) + " day ago UTC")
+        elif timeframe == "30m":
+            klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_30MINUTE, str(limits) + " day ago UTC")
         
-        for ticker in ls_tickers:
-            klines = client.get_historical_klines(ticker, Client.KLINE_INTERVAL_1DAY, str(days) + " day ago UTC")
-            data = pd.DataFrame(klines)
-            data.columns = ['open_time', 
-                            'Open', 
-                            'High', 
-                            'Low',
-                            'Close', 
-                            'Volume',
-                            'close_time',
-                            'quote_asset_volume',
-                            'number_of_trades',
-                            'taker_buy_base_asset_volume',
-                            'take_buy_quote_asset_volume',
-                            'can_be_ignored']
-            
-            data['Date'] = pd.to_datetime(data['open_time'], unit='ms')
-            df = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
-            df = df.astype({"Open": float, 
-                            "High": float, 
-                            "Low": float, 
-                            "Close": float, 
-                            "Volume": float})
-            df = df.rename(columns = {  'Date': 'date',
-                                        'Open': 'open', 
-                                        'High': 'high', 
-                                        'Low': 'low', 
-                                        'Close': 'close',
-                                        'Volume': 'volume'}, 
-                                        inplace = False)
-            df['chg'] = df['close'].pct_change() * 100
-            ls_df.append(df)
+        data = pd.DataFrame(klines)
+        data.columns = ['open_time', 
+                        'Open', 
+                        'High', 
+                        'Low',
+                        'Close', 
+                        'Volume',
+                        'close_time',
+                        'quote_asset_volume',
+                        'number_of_trades',
+                        'taker_buy_base_asset_volume',
+                        'take_buy_quote_asset_volume',
+                        'can_be_ignored']
+        
+        data['Date'] = pd.to_datetime(data['open_time'], unit='ms')
+        df = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        df = df.astype({"Open": float, 
+                        "High": float, 
+                        "Low": float, 
+                        "Close": float, 
+                        "Volume": float})
+        df = df.rename(columns = {  'Date': 'date',
+                                    'Open': 'open', 
+                                    'High': 'high', 
+                                    'Low': 'low', 
+                                    'Close': 'close',
+                                    'Volume': 'volume'}, 
+                                    inplace = False)
+        df['chg'] = df['close'].pct_change() * 100
+        ls_df.append(df)
 
-    elif exchange.lower() == 'ccxt':
-        exchange = ccxt.binance({
-                                'apiKey' : api_key,
-                                'secret' : api_secret
-                                })
+    return ls_df
 
-        ls_df = []
 
-        for ticker in ls_tickers:
-            data = exchange.fetch_ohlcv(ticker, timeframe="1d", limit=days)
-            df = pd.DataFrame(data, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
-            df['date'] = pd.to_datetime(df['date'], unit='ms')
 
-            ls_df.append(df)
+def get_historical_data_ccxt(ls_tickers, timeframe="1d",limits = 365, api_key="", api_secret=""):
 
+    exchange = ccxt.binance({'apiKey' : api_key,
+                            'secret' : api_secret
+                            })
+
+    ls_df = []
+
+    for ticker in ls_tickers:
+        data = exchange.fetch_ohlcv(ticker, timeframe=timeframe, limit=limits)
+        df = pd.DataFrame(data, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
+        df['date'] = pd.to_datetime(df['date'], unit='ms')
+
+        ls_df.append(df)
 
     return ls_df
 
@@ -178,6 +200,22 @@ def multi_rsi_str(ticker, data_df, lower, upper, length=[14]):
                 
 
 
+def multi_supertrend_str(ticker, data_df, length=[7], multiplier=[3.0]):
+
+    for i in length:
+
+        for j in multiplier:
+
+            df = data_df.copy()
+     
+            df.ta.supertrend(length=i, multiplier=j, append=True)
+            df['signal'] = df.close > df["SUPERT_" + str(i) + "_" + str(float(j))]
+
+            tsignal_df = backtest_vectorbt(df)
+
+            get_return(ticker, tsignal_df, "SuperTrend", "Close < Trend", f"Length: {i}, Multiplier: {j}")
+
+
 def backtest_vectorbt(df, enable_tsignals=True):
 
     df = df.set_index('date')
@@ -207,7 +245,7 @@ def get_return(ticker, df, strategy_name, condition, parameters_detail):
                                     entries=df.TS_Entries,
                                     exits=df.TS_Exits,
                                     freq="D",
-                                    init_cash=100000,
+                                    init_cash=1000,
                                     fees=0.0025,
                                     sl_trail = 0.20,
                                     slippage=0.0025)
@@ -217,7 +255,8 @@ def get_return(ticker, df, strategy_name, condition, parameters_detail):
     print(port_stats)
     print("-------------------------------------------------------")
 
-    # port.plot().show()
+    if port_plot == True:
+        port.plot().show()
 
     logs_path = os.path.realpath(os.path.join(current_file_path, '..', 'logs', 'backtest_log.txt'))
 
@@ -230,6 +269,7 @@ def get_return(ticker, df, strategy_name, condition, parameters_detail):
         f.write(f"Total Return [%]: {port_stats[5]}\n")
         f.write(f"Max Drawdown [%]: {port_stats[9]}\n")
         f.write(f"Win Rate [%]: {port_stats[15]}\n")
+        f.write(f"Total Trades: {port_stats[11]}\n")
         f.write("------------------------------------------------\n")
 
         input_df = pd.DataFrame({"ticker": [ticker],
@@ -238,7 +278,9 @@ def get_return(ticker, df, strategy_name, condition, parameters_detail):
                                 "parameters": [parameters_detail],
                                 "total_return": [port_stats[5]], 
                                  "max_drawdown": [port_stats[9]], 
-                                 "winrate": [port_stats[15]]})
+                                 "winrate": [port_stats[15]],
+                                 "total_trades": [port_stats[11]]
+                                 })
 
         global_log_df = global_log_df.append(input_df, ignore_index=True)
 
@@ -268,28 +310,37 @@ def export_log_df_to_csv(log_df):
 
 if __name__ == "__main__":
 
-    # ls_tickers = ['BTCUSDT']
-    ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD', 'GALABUSD']
-    
-    exchange = "binance"
-    ls_df = get_historical_data(ls_tickers=ls_tickers, 
-                                exchange=exchange, 
-                                days=120, 
-                                api_key=bn_key, api_secret=bn_secret)
+    column_names = ["ticker", "strategy", "condition", "parameters", "total_return", "max_drawdown", "winrate", "total_trades"]
+    global_log_df = pd.DataFrame(columns=column_names)
 
-    fast_macd = 12
-    slow_macd = 26
+    ls_tickers = ['BTCBUSD']
+    # ls_tickers = ['BTCBUSD', 'ETHBUSD', 'DOGEBUSD', 'UNIBUSD', 'LUNABUSD', 'NEARBUSD', 'GALABUSD']
+ 
+    # 1day = 1d
+    # 4hour = 4h
+    # 1hour = 1h
+    # 30minute = 30m
+    tf = "4h"
+    limits_data = 2000
+    api = "binance"
+    port_plot = False
+
+    ls_df = select_api_get_data(api="binance", timeframe=tf, limit=limits_data)
 
     for idx, data_df in enumerate(ls_df):
         ticker = ls_tickers[idx]
         print(ticker)
         # print(data_df)
         
+        # fast_macd = [12]
+        # slow_macd = [26]
+
         # fast_macd = [*range(5, 27, 1)]
         # slow_macd = [*range(5, 27, 1)]
 
         fast_macd = [5,12,21,26]
         slow_macd = [5,12,21,26]
+        
         multi_macd_str(ticker, data_df, fast_macd, slow_macd)
 
         multi_action_zone_str(ticker, data_df, fast_macd, slow_macd)
@@ -303,6 +354,11 @@ if __name__ == "__main__":
         rsi_lower = [30, 40]
         rsi_upper = [50, 60, 70]
         multi_rsi_str(ticker, data_df, lower=rsi_lower, upper=rsi_upper)
+
+        supertrend_length = [10, 12, 15]
+        supertrend_multiplier = [3, 4, 5]
+        multi_supertrend_str(ticker, data_df, length=supertrend_length, multiplier=supertrend_multiplier)
+
     
     global_log_df = export_log_df_to_csv(global_log_df)
         
